@@ -24,8 +24,80 @@ class ErrorReporter {
   }
 }
 
+class FunctionSecurityLabel extends SecurityLabel {
+  LowLevelSecurityLabel returnSecurityLabel, contextSecurityLabel;
+  List<LowLevelSecurityLabel> parametersSecurityLabel;
+
+  FunctionSecurityLabel(LowLevelSecurityLabel label, this.contextSecurityLabel,
+      this.parametersSecurityLabel,
+      {this.returnSecurityLabel})
+      : super(label) {
+    this.returnSecurityLabel ??= new LowLevelSecurityLabel('?');
+  }
+
+  @override
+  bool operator <(SecurityLabel other) {
+    bool ans = this.label < other.label;
+    if (other is FunctionSecurityLabel) {
+      ans = ans || this._cantMatchReturnSecurityLabel(other);
+      ans = ans || this._cantMatchContextSecurityLabel(other);
+      ans = ans || this._cantMatchParametersSecurityLabel(other);
+    }
+    return ans;
+  }
+
+  bool _cantMatchContextSecurityLabel(FunctionSecurityLabel other) {
+    return this.contextSecurityLabel < other.contextSecurityLabel;
+  }
+
+  bool _cantMatchParametersSecurityLabel(FunctionSecurityLabel other) {
+    assert(this.parametersSecurityLabel.length ==
+        other.parametersSecurityLabel.length);
+    for (var i = 0; i < this.parametersSecurityLabel.length; i++) {
+      if (this.parametersSecurityLabel[i] < other.parametersSecurityLabel[i]) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _cantMatchReturnSecurityLabel(FunctionSecurityLabel other) {
+    return this.returnSecurityLabel < other.returnSecurityLabel;
+  }
+}
+
+class LowLevelSecurityLabel {
+  static final lattice = {
+    'B': 0,
+    'L': 1,
+    'H': 2,
+    'T': 3,
+    '?': -1,
+  };
+  String lowerBoundType, upperBoundType;
+  int lowerBoundValue, upperBoundValue;
+  LowLevelSecurityLabel(this.lowerBoundType, {this.upperBoundType}) {
+    if (lowerBoundType == '?') {
+      lowerBoundType = 'B';
+      upperBoundType = 'T';
+    } else {
+      upperBoundType ??= lowerBoundType;
+    }
+    lowerBoundValue = LowLevelSecurityLabel.lattice[lowerBoundType];
+    upperBoundValue = LowLevelSecurityLabel.lattice[upperBoundType];
+  }
+
+  bool operator <(LowLevelSecurityLabel other) {
+    return upperBoundValue < other.lowerBoundValue;
+  }
+
+  @override
+  String toString() => '($lowerBoundType, $upperBoundType)';
+}
+
 class SecurityContext {
-  static SecurityLabel pc = new SecurityLabel('?');
+  static SecurityLabel pc =
+      new SimpleSecurityLabel(new LowLevelSecurityLabel('?'));
   static final oldPcs = <int, SecurityLabel>{};
 
   static SecurityValue adjacentStrings(List<SecurityValue> securityValues) {
@@ -49,7 +121,8 @@ class SecurityContext {
 
   static SecurityValue binaryExpression(SecurityValue leftLambda(),
       SecurityValue rightLambda(), String operator) {
-    SecurityValue result = new SecurityValue(null, new SecurityLabel('b'));
+    SecurityValue result =
+        new SecurityValue(null, new SimpleSecurityLabel.fromStrings('b'));
     result.value = _interpretBinaryExpression(() {
       final securityValue = leftLambda();
       result.dynamicSecurityLabel = dynamicJoin(
@@ -67,8 +140,8 @@ class SecurityContext {
   static SecurityValue booleanLiteral(bool literal) {
     return new SecurityValue(
         literal,
-        new SecurityLabel(pc.lowerBoundType,
-            upperBoundType: pc.upperBoundType));
+        new SimpleSecurityLabel.fromStrings(pc.label.lowerBoundType,
+            upperBoundType: pc.label.upperBoundType));
   }
 
   static void checkParametersType(
@@ -127,7 +200,8 @@ class SecurityContext {
     return new SecurityLabel(lowerBoundType, upperBoundType: upperBoundType);
   }
 
-  static SecurityLabel dynamicJoinMultiple(Iterable<SecurityLabel> labels) {
+  static SecurityLabel dynamicJoinMultiple(
+      Iterable<SimpleSecurityLabel> labels) {
     return labels.fold(new SecurityLabel('B'), dynamicJoin);
   }
 
@@ -213,33 +287,16 @@ class SecurityContext {
   }
 }
 
-class SecurityLabel {
-  static final lattice = {
-    'B': 0,
-    'L': 1,
-    'H': 2,
-    'T': 3,
-    '?': -1,
-  };
-  String lowerBoundType, upperBoundType;
-  int lowerBoundValue, upperBoundValue;
-  SecurityLabel(this.lowerBoundType, {this.upperBoundType}) {
-    if (lowerBoundType == '?') {
-      lowerBoundType = 'B';
-      upperBoundType = 'T';
-    } else {
-      upperBoundType ??= lowerBoundType;
-    }
-    lowerBoundValue = SecurityLabel.lattice[lowerBoundType];
-    upperBoundValue = SecurityLabel.lattice[upperBoundType];
-  }
+abstract class SecurityLabel {
+  LowLevelSecurityLabel label;
+  SecurityLabel(this.label);
 
   bool operator <(SecurityLabel other) {
-    return upperBoundValue < other.lowerBoundValue;
+    return this.label < other.label;
   }
 
   @override
-  String toString() => '($lowerBoundType, $upperBoundType)';
+  String toString() => label.toString();
 }
 
 class SecurityValue {
@@ -251,4 +308,14 @@ class SecurityValue {
 
   @override
   String toString() => '($value, $staticSecurityLabel, $dynamicSecurityLabel)';
+}
+
+class SimpleSecurityLabel extends SecurityLabel {
+  SimpleSecurityLabel(LowLevelSecurityLabel label) : super(label);
+
+  factory SimpleSecurityLabel.fromStrings(String lowerBoundType,
+      {String upperBoundType}) {
+    return new SimpleSecurityLabel(new LowLevelSecurityLabel(lowerBoundType,
+        upperBoundType: upperBoundType));
+  }
 }
