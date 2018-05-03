@@ -3,7 +3,7 @@ description: A REST Web Api for the security analysis
 version: 0.0.1
 
 environment:
-  sdk: '>=1.20.1 <2.0.0'
+  sdk: '>=1.20.1 <=2.0.0-dev.36.0'
 
 dependencies:
   analyzer: '>= 0.27.1 <1.0.0'
