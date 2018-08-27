@@ -410,7 +410,7 @@ class GraphLattice {
     if (!_adjacencyMatrix[u][v]) {
       _adjacencyList[u].add(v);
       _inverseAdjacencyList[v].add(u);
-      _adjacencyMatrix[_index[s1]][_index[s2]] = true;
+      _adjacencyMatrix[u][v] = true;
       _adjacencyListUsingStrings[u].add(s2);
     }
   }
